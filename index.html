@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Americas since 1492 — Populations &amp; Voyages</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='7' fill='%23f5c542'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>The Americas since 1492</h1>
+        <p class="sub">Population by country and the ships that crossed the Atlantic, year by year</p>
+      </div>
+      <div class="year-display"><span id="year">1492</span><small id="year-note"></small></div>
+    </header>
+
+    <main class="layout">
+      <section class="map-wrap" id="map-wrap">
+        <svg id="map-base"></svg>
+        <canvas id="trails"></canvas>
+        <canvas id="ships"></canvas>
+        <svg id="map-overlay"></svg>
+        <div class="event" id="event"></div>
+        <div class="map-legend" id="map-legend"></div>
+        <div class="tooltip" id="tooltip"></div>
+        <div class="loading" id="loading">Loading data…</div>
+      </section>
+
+      <aside class="panel">
+        <div class="stat-block">
+          <div class="stat">
+            <label>Population of the Americas</label>
+            <div class="big" id="stat-pop">–</div>
+            <div class="delta" id="stat-pop-delta"></div>
+          </div>
+          <div class="stat">
+            <label>Documented slave voyages arriving this year</label>
+            <div class="big" id="stat-voyages">–</div>
+            <div class="delta" id="stat-voyages-sub"></div>
+          </div>
+          <div class="stat">
+            <label>Africans forced aboard, cumulative (est.)</label>
+            <div class="big" id="stat-embarked">–</div>
+            <div class="delta" id="stat-embarked-sub"></div>
+          </div>
+        </div>
+
+        <h3>Most populous places</h3>
+        <ol class="top-list" id="top-list"></ol>
+
+        <h3>Layers</h3>
+        <div class="toggles">
+          <label><input type="checkbox" id="t-bubbles" checked /> Population bubbles</label>
+          <label><input type="checkbox" id="t-shade" checked /> Shade by change since 1492</label>
+          <label><input type="checkbox" id="t-trans" checked /> Trans-Atlantic slave voyages</label>
+          <label><input type="checkbox" id="t-intra" checked /> Intra-American slave voyages</label>
+          <label><input type="checkbox" id="t-migration" checked /> Migration (representative)</label>
+          <label><input type="checkbox" id="t-columbus" checked /> Exploration voyages</label>
+        </div>
+      </aside>
+    </main>
+
+    <section class="timeline">
+      <button id="play" class="play" aria-label="Play">▶</button>
+      <div class="slider-wrap">
+        <input type="range" id="slider" min="1492" max="2023" step="0.01" value="1492.58" />
+        <div class="ticks" id="ticks"></div>
+      </div>
+      <label class="speed"
+        >Speed
+        <select id="speed">
+          <option value="1">1 yr/s</option>
+          <option value="3" selected>3 yr/s</option>
+          <option value="8">8 yr/s</option>
+          <option value="20">20 yr/s</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="charts">
+      <div class="chart">
+        <div class="chart-head">
+          <h3>Population by region</h3>
+          <div class="seg" id="scale-toggle">
+            <button data-scale="log" class="on">Log</button><button data-scale="linear">Linear</button>
+          </div>
+        </div>
+        <svg id="pop-chart"></svg>
+      </div>
+      <div class="chart">
+        <div class="chart-head">
+          <h3>Enslaved Africans embarked per year, by flag of ship (estimates)</h3>
+        </div>
+        <svg id="trade-chart"></svg>
+      </div>
+    </section>
+
+    <footer>
+      <p>
+        <strong>Population:</strong> Our World in Data, “Population – HYDE, Gapminder, UN – Long-run data” (HYDE 3.3 to 1799, Gapminder
+        1800–1949, UN WPP 2024 from 1950), CC BY 4.0. Values use present-day borders; points between source years (1500, 1600, 1700, then
+        every decade to 1800) are log-interpolated, and the series can jump where sources change (1800, 1950). Pre-contact estimates are highly
+        uncertain (scholarly range ≈ 8–110 million for the hemisphere).
+      </p>
+      <p>
+        <strong>Voyages:</strong> Trans-Atlantic Slave Trade Database (2019) and Intra-American Slave Trade Database 1.0, SlaveVoyages.org,
+        CC BY-NC 3.0; annual totals from the SlaveVoyages estimates. Ships are drawn from the main place of purchase to the main place of
+        landing, timed to the year of arrival. Coordinates from the SlaveVoyages geographic tables. Columbus routes are approximate.
+      </p>
+      <p>
+        <strong>Free migration:</strong> US DHS Yearbook 2019 and Statistics Canada A350 totals, plus historical estimates.
+        Ships and sailing paths are schematic, not individual voyage records. Colonial Spanish aggregate estimates are rotated evenly across
+        historically available Atlantic gateways in the Caribbean, Mexico, northern South America, Panama, and (from the broader
+        1778 trade opening) the Río de la Plata. This distribution is illustrative, not measured migrant shares for each destination.
+        Peru-bound journeys are drawn through the Panama isthmus (Nombre de Dios until 1596, Portobelo from 1597) and down the Pacific
+        coast to Callao; from the 1740s some are routed directly around Cape Horn. Each drawn path combines historically separate
+        Atlantic, overland, and Pacific legs. Earlier restricted Buenos Aires traffic is not included in this gateway model.
+        Route history: <a href="https://whc.unesco.org/en/list/135/" target="_blank" rel="noopener noreferrer">UNESCO</a> and
+        <a href="https://files.eric.ed.gov/fulltext/ED099152.pdf" target="_blank" rel="noopener noreferrer">Boyd-Bowman’s recorded emigrant samples</a>,
+        which are not a complete destination-share series through 1820. English colonial flows start at each colony's founding
+        (Jamestown 1607, Plymouth 1620, Barbados 1627, Pennsylvania 1682) and are split into short periods: ~1,800 to Virginia
+        before 1619, ~1,000 to New England in the 1620s, then ~20,000 in the 1630s Great Migration. Quebec starts in 1608 and
+        New Netherland in 1624. Post-1820 Latin American overseas migration uses official annual arrival series from
+        <a href="https://www.nber.org/books-and-chapters/international-migrations-volume-i-statistics" target="_blank" rel="noopener noreferrer">Ferenczi &amp; Willcox (1929)</a>,
+        Dirección Nacional de Migraciones / INDEC (Argentina 1857–1960), IBGE (Brazil 1820–1960), Dirección General de Estadística (Uruguay 1835–1960),
+        Secretaría de Hacienda (Cuba 1901–1935+), and Dirección General de Estadística (Venezuela 1919–1960). In accordance with methodology,
+        all intra-American transfers (e.g. Río de la Plata river traffic, Caribbean contract labor, continental overland moves) are excluded in favor of transoceanic overseas arrivals.
+      </p>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
