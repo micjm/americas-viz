@@ -80,7 +80,7 @@ const COUNTRIES = [
   ["CHL", "152", "South America", -71, -33],
   ["ECU", "218", "South America", -78.4, -1.5],
   ["BOL", "068", "South America", -64.7, -16.7],
-  ["PRY", "600", "South America", -58.9, -23.4],
+  ["PRY", "600", "South America", -58.4, -23.4],
   ["URY", "858", "South America", -56, -32.8],
   ["GUY", "328", "South America", -58.9, 5],
   ["SUR", "740", "South America", -55.9, 4.1],
@@ -208,8 +208,6 @@ function buildVoyages() {
 
   // Representative free-migration ships (see migration.mjs for sources).
   // kind 2 = migration; each ship stands for `load` migrants over a flow's year range.
-  // Flows with `destinations` keep their totals/annual ship counts unchanged: the
-  // ships are only rotated evenly across that year's eligible gateways.
   let migShips = 0, migPeople = 0;
   const migrationModels = {};
   const flows = migrationFlows(RAW + "mig/a350.csv");
@@ -239,14 +237,6 @@ function buildVoyages() {
             note: destination.note ?? "",
             waypoints: [[-10, 35], ...(destination.waypoints ?? [])],
           };
-        } else if (fl.note || fl.waypoints) {
-          migrationModels[label] = {
-            allocation: fl.doc
-              ? "Official annual statistics; schematic voyage paths."
-              : "Period estimate spread evenly across its years; not documented voyages.",
-            note: fl.note ?? "",
-            waypoints: fl.waypoints ?? [],
-          };
         }
         cols.year.push(y);
         cols.from.push(fi);
@@ -265,6 +255,7 @@ function buildVoyages() {
       }
     }
   }
+  const llOf = (code) => lookup.get(code) ?? places[placeIndex.get(code)];
 
   const order = cols.year.map((_, i) => i).sort((a, b) => cols.year[a] - cols.year[b]);
   const sorted = {};

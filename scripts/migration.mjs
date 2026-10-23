@@ -1,6 +1,5 @@
 import XLSX from "xlsx";
 import { readFileSync } from "node:fs";
-import { annualMigrationFlows } from "./annual-migrations.mjs";
 
 // Free (non-slave) migration flows into the Americas, 1500–1960.
 // Combines official statistics (US DHS Yearbook 2019, Statistics Canada A350) with
@@ -11,10 +10,6 @@ import { annualMigrationFlows } from "./annual-migrations.mjs";
 //
 // Flows: { y0, y1, n, f: [lon,lat], t: [lon,lat], o: origin label, d: dest label,
 //          load: people per representative ship, doc: documented? }
-// A flow may instead carry `destinations`: eligible gateways per year, each with
-// { y0, y1, t, d, note?, waypoints? }. build-data rotates representative ships
-// evenly across the eligible gateways; this is an ILLUSTRATIVE distribution,
-// not measured destination shares.
 
 const flow = (y0, y1, n, f, t, o, d, load = 150, doc = false) => ({ y0, y1, n, f, t, o, d, load, doc });
 
@@ -45,21 +40,14 @@ const P = {
   macao: [113.55, 22.17],
   yokohama: [139.65, 35.45],
   shanghai: [121.47, 31.23],
-  hongkong_pacific: [140.0, 22.3],
-  macao_pacific: [140.0, 22.17],
   // destinations
   newyork: [-74.0, 40.6],
   boston: [-70.9, 42.4],
   philadelphia: [-75.1, 39.9],
   baltimore: [-76.6, 39.25],
   neworleans: [-90.05, 29.3],
-  sanfrancisco: [-122.42, 37.77],
-  mazatlan: [-106.42, 23.23],
-  vancouver: [-123.12, 49.28],
   quebec: [-71.3, 46.85],
   halifax: [-63.6, 44.65],
-  jamestown: [-76.78, 37.21],
-  bridgetown: [-59.62, 13.1],
   veracruz: [-96.1, 19.2],
   santodomingo: [-69.9, 18.47],
   havana: [-82.37, 23.11],
@@ -89,141 +77,51 @@ const P = {
   laguaira: [-66.93, 10.6],
 };
 
-const PERU_ISTHMUS_NOTE =
-  "Schematic path combines the Atlantic voyage, an overland isthmus crossing (Nombre de Dios until 1596, Portobelo from 1597, then Panama City), and a separate Pacific voyage.";
-
 const SPANISH_GATEWAYS = [
   {
-    y0: 1500,
-    y1: 1820,
-    t: P.santodomingo,
-    d: "Caribbean — Santo Domingo",
+    y0: 1500, y1: 1820, t: P.santodomingo, d: "Caribbean — Santo Domingo",
     waypoints: [[-67.7, 20], [-67.8, 17.7]],
   },
   {
-    y0: 1519,
-    y1: 1820,
-    t: P.veracruz,
-    d: "New Spain — Veracruz / San Juan de Ulúa",
+    y0: 1519, y1: 1820, t: P.veracruz, d: "New Spain — Veracruz / San Juan de Ulúa",
     waypoints: [[-73, 29], [-79, 27.5], [-79.5, 24], [-84, 24]],
   },
   {
-    y0: 1519,
-    y1: 1820,
-    t: P.havana,
-    d: "Cuba — Havana",
+    y0: 1519, y1: 1820, t: P.havana, d: "Cuba — Havana",
     waypoints: [[-73, 29], [-79, 27.5], [-79.5, 24], [-82.5, 23.6]],
   },
   { y0: 1521, y1: 1820, t: P.sanjuan, d: "Puerto Rico — San Juan" },
   {
-    y0: 1533,
-    y1: 1820,
-    t: P.cartagena,
-    d: "Northern South America — Cartagena",
+    y0: 1533, y1: 1820, t: P.cartagena, d: "Northern South America — Cartagena",
     waypoints: [[-67.7, 20], [-67.8, 17.7], [-76, 12], [-76, 11]],
   },
   {
-    y0: 1519,
-    y1: 1596,
-    t: P.callao,
-    d: "Peru — Callao (via Panama isthmus)",
-    note: PERU_ISTHMUS_NOTE,
-    landCrossing: true,
-    waypoints: [
-      [-67.7, 20],
-      [-67.8, 17.7],
-      [-75, 13],
-      [-79.48, 9.58],
-      [-79.55, 9.1],
-      [-79.52, 8.97],
-      [-79.9, 7.6],
-      [-80.8, 6.6],
-      [-83.5, 0],
-      [-82.5, -5],
-      [-81, -8],
-    ],
+    y0: 1519, y1: 1596, t: P.nombrededios, d: "Panama — Nombre de Dios (Atlantic gateway)",
+    note: "Onward travel to Peru required an isthmus crossing and a separate Pacific voyage; those legs are not drawn.",
+    waypoints: [[-67.7, 20], [-67.8, 17.7], [-75, 13]],
   },
   {
-    y0: 1597,
-    y1: 1820,
-    t: P.callao,
-    d: "Peru — Callao (via Panama isthmus)",
-    note: PERU_ISTHMUS_NOTE,
-    landCrossing: true,
-    waypoints: [
-      [-67.7, 20],
-      [-67.8, 17.7],
-      [-75, 13],
-      [-79.65, 9.55],
-      [-79.55, 9.1],
-      [-79.52, 8.97],
-      [-79.9, 7.6],
-      [-80.8, 6.6],
-      [-83.5, 0],
-      [-82.5, -5],
-      [-81, -8],
-    ],
+    y0: 1597, y1: 1820, t: P.portobelo, d: "Panama — Portobelo (Atlantic gateway)",
+    note: "Onward travel to Peru required an isthmus crossing and a separate Pacific voyage; those legs are not drawn.",
+    waypoints: [[-67.7, 20], [-67.8, 17.7], [-75, 13]],
   },
   {
-    y0: 1740,
-    y1: 1820,
-    t: P.callao,
-    d: "Peru — Callao (Cape Horn route)",
-    note: "Direct Spain–Pacific voyages around Cape Horn became more prominent from the 1740s; the isthmus route did not close completely.",
-    waypoints: [
-      [-22, 30],
-      [-25, 20],
-      [-30, -10],
-      [-48, -30],
-      [-58, -45],
-      [-63, -53],
-      [-64, -55.8],
-      [-67, -56.5],
-      [-71, -56],
-      [-76.5, -53],
-      [-78, -46],
-      [-78, -38],
-      [-77.5, -20],
-    ],
-  },
-  {
-    y0: 1589,
-    y1: 1820,
-    t: P.laguaira,
-    d: "Venezuela — La Guaira",
+    y0: 1589, y1: 1820, t: P.laguaira, d: "Venezuela — La Guaira",
     waypoints: [[-67.7, 20], [-67.8, 17.7]],
   },
   {
-    y0: 1778,
-    y1: 1820,
-    t: P.buenosaires,
-    d: "Río de la Plata — Buenos Aires",
+    y0: 1778, y1: 1820, t: P.buenosaires, d: "Río de la Plata — Buenos Aires",
     note: "Buenos Aires received earlier restricted traffic; it joins this illustrative network at the broader 1778 trade opening.",
     waypoints: [[-22, 30], [-25, 20], [-30, -10], [-48, -30], [-54, -36]],
   },
 ];
-
-const noted = (fl, note) => ({ ...fl, note });
-
-const VIRGINIA_CO_NOTE =
-  "Virginia Company sent roughly 7,000 people in 1607–1624 (about 1,800 before the 1619 Sandys reforms); only ~1,200 were alive at the 1625 muster.";
-const CHESAPEAKE_NOTE =
-  "Approximate period total (Horn; Menard): ~110,000 English migrants to the Chesapeake 1625–1699, mostly indentured servants.";
-const NEW_ENGLAND_NOTE =
-  "Plymouth (1620) held only a few hundred settlers by 1630; ~20,000 arrived in the 1630s Great Migration (Anderson), and arrivals fell off after 1640.";
-const CARIBBEAN_NOTE =
-  "St Kitts (1624) and Barbados (1627) drew roughly 190,000 English and Irish migrants in the 17th century (Gemery; Galenson) — more than any mainland colony.";
 
 const spanishFlow = (y0, y1, n, f) => ({
   ...flow(y0, y1, n, f, P.santodomingo, "Spain", "Spanish America"),
   destinations: SPANISH_GATEWAYS,
 });
 
-// ============================================================================
-// Pre-1820 European settlement (Eltis 1983, decadal; Gemery; Boyd-Bowman)
-// ============================================================================
 const FLOWS = [
-  // Spanish America (via Seville/Cádiz; Caribbean + Veracruz + Cartagena + Panama + later Cape Horn / Buenos Aires)
   spanishFlow(1500, 1580, 120000, P.seville),
   spanishFlow(1580, 1640, 200000, P.seville),
   spanishFlow(1640, 1700, 100000, P.cadiz),
@@ -235,27 +133,18 @@ const FLOWS = [
   flow(1640, 1700, 150000, P.lisbon, P.recife, "Portugal", "Brazil"),
   flow(1700, 1760, 300000, P.lisbon, P.rio, "Portugal", "Brazil"),
   flow(1760, 1820, 100000, P.lisbon, P.rio, "Portugal", "Brazil"),
-  // British America: each destination starts at its founding date, and periods
-  // are split so a period total is not spread back into the years before a colony grew.
-  noted(flow(1607, 1618, 1800, P.london, P.jamestown, "Britain", "British America — Virginia (Jamestown)"), VIRGINIA_CO_NOTE),
-  noted(flow(1619, 1624, 5000, P.london, P.jamestown, "Britain", "British America — Virginia (Jamestown)"), VIRGINIA_CO_NOTE),
-  noted(flow(1625, 1639, 15000, P.london, P.jamestown, "Britain", "British America — Chesapeake (Virginia)"), CHESAPEAKE_NOTE),
-  noted(flow(1640, 1699, 95000, P.bristol, P.jamestown, "Britain", "British America — Chesapeake (Virginia & Maryland)"), CHESAPEAKE_NOTE),
-  noted(flow(1620, 1629, 1000, P.london, P.boston, "Britain", "British America — New England (Plymouth & Boston)"), NEW_ENGLAND_NOTE),
-  noted(flow(1630, 1640, 20000, P.london, P.boston, "Britain", "British America — New England (Plymouth & Boston)"), NEW_ENGLAND_NOTE),
-  noted(flow(1641, 1699, 5000, P.london, P.boston, "Britain", "British America — New England (Plymouth & Boston)"), NEW_ENGLAND_NOTE),
-  noted(flow(1627, 1639, 20000, P.london, P.bridgetown, "Britain", "British Caribbean — Barbados & Leewards"), CARIBBEAN_NOTE),
-  noted(flow(1640, 1699, 170000, P.bristol, P.bridgetown, "Britain & Ireland", "British Caribbean — Barbados & Leewards"), CARIBBEAN_NOTE),
-  noted(flow(1682, 1699, 12000, P.bristol, P.philadelphia, "Britain & Ireland", "British America — Philadelphia"), "Pennsylvania was founded in 1682; earlier middle-colony arrivals are not modeled."),
-  flow(1700, 1759, 400000, P.liverpool, P.philadelphia, "Britain, Ireland & Germany", "British America — Philadelphia"),
+  // British America
+  flow(1600, 1640, 60000, P.london, P.boston, "Britain", "British America — Boston"),
+  flow(1640, 1700, 250000, P.bristol, P.philadelphia, "Britain & Ireland", "British America — Philadelphia"),
+  flow(1700, 1760, 400000, P.liverpool, P.philadelphia, "Britain, Ireland & Germany", "British America — Philadelphia"),
   flow(1760, 1780, 100000, P.liverpool, P.newyork, "Britain & Ireland", "British America — New York"),
-  // French America (Quebec founded 1608; ~300 colonists by 1640)
-  flow(1608, 1639, 1000, P.lehavre, P.quebec, "France", "New France"),
-  flow(1640, 1699, 15000, P.lehavre, P.quebec, "France", "New France"),
+  // French America
+  flow(1600, 1640, 10000, P.lehavre, P.quebec, "France", "New France"),
+  flow(1640, 1700, 15000, P.lehavre, P.quebec, "France", "New France"),
   flow(1700, 1760, 10000, P.lehavre, P.quebec, "France", "New France"),
   flow(1700, 1760, 8000, P.lehavre, P.neworleans, "France", "Louisiana"),
-  // Dutch America (first New Netherland settlers 1624)
-  flow(1624, 1664, 10000, P.rotterdam, P.newyork, "Netherlands", "New Netherland"),
+  // Dutch America
+  flow(1620, 1664, 10000, P.rotterdam, P.newyork, "Netherlands", "New Netherland"),
   flow(1630, 1654, 6000, P.rotterdam, P.recife, "Netherlands", "Dutch Brazil"),
 ];
 
@@ -274,42 +163,40 @@ function usFlows() {
   // origin -> [port, label, include?]
   const ORIGIN = {
     "Austria-Hungary": [P.trieste, "Austria-Hungary"],
-    Austria: [P.trieste, "Austria"],
-    Hungary: [P.trieste, "Hungary"],
-    Belgium: [P.rotterdam, "Belgium"],
-    Denmark: [P.hamburg, "Denmark"],
-    France: [P.lehavre, "France"],
-    Germany: [P.hamburg, "Germany"],
-    Greece: [P.naples, "Greece"],
-    Ireland: [P.liverpool, "Ireland"],
-    Italy: [P.naples, "Italy"],
-    Netherlands: [P.rotterdam, "Netherlands"],
+    "Austria": [P.trieste, "Austria"],
+    "Hungary": [P.trieste, "Hungary"],
+    "Belgium": [P.rotterdam, "Belgium"],
+    "Denmark": [P.hamburg, "Denmark"],
+    "France": [P.lehavre, "France"],
+    "Germany": [P.hamburg, "Germany"],
+    "Greece": [P.naples, "Greece"],
+    "Ireland": [P.liverpool, "Ireland"],
+    "Italy": [P.naples, "Italy"],
+    "Netherlands": [P.rotterdam, "Netherlands"],
     "Norway-Sweden": [P.hamburg, "Norway & Sweden"],
-    Norway: [P.hamburg, "Norway"],
-    Sweden: [P.hamburg, "Sweden"],
-    Poland: [P.gdansk, "Poland"],
-    Portugal: [P.lisbon, "Portugal"],
-    Romania: [P.constantinople, "Romania"],
-    Russia: [P.odessa, "Russia"],
-    Spain: [P.cadiz, "Spain"],
-    Switzerland: [P.lehavre, "Switzerland"],
+    "Norway": [P.hamburg, "Norway"],
+    "Sweden": [P.hamburg, "Sweden"],
+    "Poland": [P.gdansk, "Poland"],
+    "Portugal": [P.lisbon, "Portugal"],
+    "Romania": [P.constantinople, "Romania"],
+    "Russia": [P.odessa, "Russia"],
+    "Spain": [P.cadiz, "Spain"],
+    "Switzerland": [P.lehavre, "Switzerland"],
     "United Kingdom": [P.liverpool, "United Kingdom"],
-    Yugoslavia: [P.trieste, "Yugoslavia"],
+    "Yugoslavia": [P.trieste, "Yugoslavia"],
     "Other Europe": [P.hamburg, "Other Europe"],
-    China: [P.hongkong_pacific, "China"],
-    India: [P.calcutta, "India"],
-    Japan: [P.yokohama, "Japan"],
-    "Other Asia": [P.hongkong_pacific, "Other Asia"],
+    "China": [P.hongkong, "China"],
+    "India": [P.calcutta, "India"],
+    "Japan": [P.yokohama, "Japan"],
+    "Other Asia": [P.hongkong, "Other Asia"],
   };
-  const SKIP_PREFIX = [
-    "Total", "Europe", "Asia", "America", "Africa", "Oceania", "Not Specified", "Canada", "Mexico",
+  const SKIP_PREFIX = ["Total", "Europe", "Asia", "America", "Africa", "Oceania", "Not Specified", "Canada", "Mexico",
     "Caribbean", "Cuba", "Dominican", "Haiti", "Jamaica", "Other Caribbean", "Central America", "Belize", "Costa Rica",
     "El Salvador", "Guatemala", "Honduras", "Nicaragua", "Panama", "South America", "Argentina", "Bolivia", "Brazil",
     "Chile", "Colombia", "Ecuador", "Guyana", "Paraguay", "Peru", "Suriname", "Uruguay", "Venezuela", "Other South",
     "Other America", "Egypt", "Ethiopia", "Liberia", "Morocco", "South Africa", "Other Africa", "Australia",
     "New Zealand", "Other Oceania", "Hong Kong", "Iran", "Israel", "Jordan", "Korea", "Philippines", "Syria",
-    "Taiwan", "Turkey", "Vietnam", "Czechoslovakia", "Bulgaria", "Finland",
-  ];
+    "Taiwan", "Turkey", "Vietnam", "Czechoslovakia", "Bulgaria", "Finland"];
   const flows = [];
   for (const r of rows) {
     const name0 = typeof r[0] === "string" ? r[0].replace(/\d*$/, "").trim() : "";
@@ -319,7 +206,6 @@ function usFlows() {
     const key = Object.keys(ORIGIN).find((k) => clean.startsWith(k));
     if (!key) continue;
     const [port, label] = ORIGIN[key];
-    const destPort = key === "China" || key === "Japan" || key === "Other Asia" ? P.sanfrancisco : P.newyork;
     for (let c = 1; c < r.length && c <= decLabels.length; c++) {
       const dl = decLabels[c - 1];
       if (!dl) continue; // annual 2010+ columns: beyond our range, skip
@@ -330,10 +216,61 @@ function usFlows() {
       const yy1 = Math.min(y1, 1960);
       if (yy1 < y0) continue;
       const frac = (yy1 - y0 + 1) / (y1 - y0 + 1);
-      flows.push(flow(y0, yy1, Math.round(v * frac), port, destPort, label, "United States", 400, true));
+      flows.push(flow(y0, yy1, Math.round(v * frac), port, P.newyork, label, "United States", 400, true));
     }
   }
   return flows;
+}
+
+// ============================================================================
+// Argentina 1857–1960 (INDEC compilations; gross entries by nationality, decadal)
+// ============================================================================
+const ARG = [
+  // [decade, total, {Italian, Spanish, French, German, Ottoman, Russian, Portuguese}]
+  [1857, 1869, 160000, { it: 0.45, es: 0.30, fr: 0.12, de: 0.04, pt: 0.02 }],
+  [1870, 1879, 430000, { it: 0.50, es: 0.25, fr: 0.08, de: 0.04, ot: 0.03, ru: 0.02 }],
+  [1880, 1889, 840000, { it: 0.55, es: 0.20, fr: 0.07, de: 0.03, ot: 0.04, ru: 0.04 }],
+  [1890, 1899, 650000, { it: 0.50, es: 0.25, fr: 0.04, de: 0.03, ot: 0.05, ru: 0.05 }],
+  [1900, 1909, 1130000, { it: 0.48, es: 0.30, fr: 0.03, de: 0.03, ot: 0.06, ru: 0.04 }],
+  [1910, 1919, 1060000, { it: 0.42, es: 0.35, fr: 0.02, de: 0.02, ot: 0.06, ru: 0.03, pt: 0.02 }],
+  [1920, 1929, 1120000, { it: 0.35, es: 0.35, fr: 0.02, de: 0.03, ot: 0.03, ru: 0.05, po: 0.04 }],
+  [1930, 1939, 300000, { it: 0.30, es: 0.30, de: 0.08, po: 0.06 }],
+  [1940, 1949, 250000, { it: 0.35, es: 0.35, de: 0.05 }],
+  [1950, 1960, 350000, { it: 0.45, es: 0.30, de: 0.04 }],
+];
+const ARG_PORT = { it: P.genoa, es: P.coruna, fr: P.marseille, de: P.hamburg, ot: P.constantinople, ru: P.odessa, pt: P.lisbon, po: P.gdansk };
+const ARG_LABEL = { it: "Italy", es: "Spain", fr: "France", de: "Germany", ot: "Ottoman Empire", ru: "Russia", pt: "Portugal", po: "Poland" };
+for (const [y0, y1, total, mix] of ARG) {
+  for (const [k, share] of Object.entries(mix)) {
+    const n = Math.round(total * share);
+    if (n < 500) continue;
+    FLOWS.push(flow(y0, y1, n, ARG_PORT[k], P.buenosaires, ARG_LABEL[k], "Argentina", 600));
+  }
+}
+
+// ============================================================================
+// Brazil 1820–1960 (IBGE Estatísticas Históricas, by nationality, decadal)
+// ============================================================================
+const BRA = [
+  [1820, 1869, 200000, { pt: 0.75, de: 0.10, it: 0.05, es: 0.02 }],
+  [1870, 1879, 400000, { pt: 0.40, it: 0.30, de: 0.08, es: 0.05, jp: 0.0 }],
+  [1880, 1889, 500000, { pt: 0.30, it: 0.45, de: 0.06, es: 0.08 }],
+  [1890, 1899, 1200000, { pt: 0.22, it: 0.55, de: 0.05, es: 0.10, jp: 0.01 }],
+  [1900, 1909, 650000, { pt: 0.30, it: 0.25, es: 0.18, jp: 0.06, ot: 0.08 }],
+  [1910, 1919, 550000, { pt: 0.35, it: 0.20, es: 0.12, jp: 0.10, ot: 0.08, ru: 0.05 }],
+  [1920, 1929, 850000, { pt: 0.30, it: 0.12, es: 0.08, jp: 0.15, ru: 0.08, de: 0.05 }],
+  [1930, 1939, 400000, { pt: 0.25, it: 0.08, jp: 0.25, de: 0.10, po: 0.08 }],
+  [1940, 1949, 150000, { pt: 0.30, jp: 0.15, it: 0.10, es: 0.10 }],
+  [1950, 1960, 400000, { pt: 0.40, it: 0.10, jp: 0.10, es: 0.08, de: 0.06 }],
+];
+const BRA_PORT = { ...ARG_PORT, jp: P.yokohama };
+for (const [y0, y1, total, mix] of BRA) {
+  for (const [k, share] of Object.entries(mix)) {
+    const n = Math.round(total * share);
+    if (n < 500) continue;
+    const dest = k === "jp" ? P.santos : P.rio;
+    FLOWS.push(flow(y0, y1, n, BRA_PORT[k], dest, ARG_LABEL[k] ?? "Japan", "Brazil", 600));
+  }
 }
 
 // ============================================================================
@@ -353,46 +290,50 @@ const INDENT = [
   flow(1854, 1889, 26000, P.calcutta, P.fortdefrance, "India (indentured)", "Martinique", 350),
   // French Guiana ~19k
   flow(1854, 1889, 19000, P.calcutta, P.cayenne, "India (indentured)", "French Guiana", 350),
-  // Grenada/St Lucia/St Vincent ~9k combined
+  // Grenada/St Lucia/St Vincent ~14k combined
   flow(1856, 1885, 9000, P.calcutta, P.georgetown, "India (indentured)", "Windward Islands", 350),
   // Cuba (Chinese) ~125k via Macao
   flow(1847, 1874, 125000, P.macao, P.havana, "China (coolie trade)", "Cuba", 300),
   // Peru (Chinese) ~95k via Macao
-  flow(1849, 1874, 95000, P.macao_pacific, P.callao, "China (coolie trade)", "Peru", 300),
+  flow(1849, 1874, 95000, P.macao, P.callao, "China (coolie trade)", "Peru", 300),
   // Panama railroad (Chinese) ~20k
-  flow(1850, 1855, 20000, P.hongkong_pacific, P.panama, "China (railroad labor)", "Panama", 300),
+  flow(1850, 1855, 20000, P.hongkong, P.panama, "China (railroad labor)", "Panama", 300),
+  // British Guiana West-African/Azorean supplemental ~ skip
 ];
 FLOWS.push(...INDENT);
 
 // ============================================================================
-// Chile, Mexico, Puerto Rico, Colombia, others 1820–1960
-// (Argentina, Brazil, Uruguay, Cuba, and Venezuela use source-backed annual series)
+// Chile, Cuba (Spanish post-independence), Mexico, Puerto Rico, others 1820–1960
 // ============================================================================
 const OTHER = [
+  flow(1820, 1960, 200000, P.cadiz, P.havana, "Spain", "Cuba", 300),
   flow(1820, 1930, 100000, P.cadiz, P.sanjuan, "Spain", "Puerto Rico", 300),
   flow(1845, 1914, 60000, P.coruna, P.valparaiso, "Spain", "Chile", 400),
   flow(1880, 1914, 40000, P.hamburg, P.valparaiso, "Germany", "Chile", 400),
   flow(1845, 1914, 40000, P.lehavre, P.veracruz, "France", "Mexico", 400),
   flow(1880, 1910, 15000, P.genoa, P.veracruz, "Italy", "Mexico", 400),
-  flow(1900, 1930, 12000, P.yokohama, P.mazatlan, "Japan", "Mexico", 400),
-  flow(1820, 1900, 40000, P.cadiz, P.cartagena, "Spain", "Colombia", 300),
+  flow(1900, 1930, 12000, P.yokohama, P.veracruz, "Japan", "Mexico", 400),
+  flow(1820, 1900, 60000, P.cadiz, P.cartagena, "Spain", "Colombia & Venezuela", 300),
   flow(1820, 1900, 30000, P.cadiz, P.callao, "Spain", "Peru", 300),
   flow(1900, 1914, 14000, P.yokohama, P.callao, "Japan", "Peru", 400),
   flow(1920, 1960, 20000, P.yokohama, P.callao, "Japan", "Peru", 400),
+  flow(1830, 1900, 40000, P.cadiz, P.montevideo, "Spain & Italy", "Uruguay", 400),
+  flow(1880, 1930, 130000, P.genoa, P.montevideo, "Italy", "Uruguay", 600),
+  flow(1880, 1930, 80000, P.cadiz, P.montevideo, "Spain", "Uruguay", 600),
   flow(1840, 1880, 10000, P.liverpool, P.belizecity, "Britain", "Central America", 200),
   flow(1850, 1914, 30000, P.liverpool, P.kingston, "Britain", "Jamaica", 300),
   flow(1838, 1860, 40000, P.liverpool, P.georgetown, "Africa (free, post-emancipation)", "British Guiana", 300),
   flow(1838, 1870, 14000, P.macao, P.georgetown, "China (indentured)", "British Guiana", 300),
   flow(1852, 1862, 3000, P.hongkong, P.georgetown, "China (indentured)", "British Guiana", 300),
   flow(1841, 1867, 36000, P.liverpool, P.portofspain, "Madeira & Africa", "Trinidad", 300),
-  flow(1850, 1914, 8000, P.hongkong_pacific, P.panama, "China", "Panama", 300),
+  flow(1850, 1914, 8000, P.hongkong, P.panama, "China", "Panama", 300),
   flow(1854, 1885, 11000, P.hongkong, P.portofspain, "China (indentured)", "Trinidad", 300),
   flow(1858, 1866, 2500, P.hongkong, P.kingston, "China (indentured)", "Jamaica", 300),
 ];
 FLOWS.push(...OTHER);
 
 export function migrationFlows(a350Path) {
-  const flows = [...FLOWS, ...usFlows(), ...annualMigrationFlows(P, flow, noted)];
+  const flows = [...FLOWS, ...usFlows()];
 
   // Canada official annual arrivals (StatCan A350), 1852–1960.
   // Column pairs "Year","Number" are laid out 5 across; values like "73,912".

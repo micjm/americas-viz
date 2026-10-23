@@ -221,9 +221,9 @@ function voyagePath(i) {
   if (waypoints?.length) {
     const stops = [a, ...waypoints, b];
     for (let j = 1; j < stops.length; j++) legs.push([stops[j - 1], stops[j]]);
-  } else if (a[0] > 22 && a[0] < 135 && b[0] < 0) {
+  } else if (a[0] > 22 && b[0] < 0) {
     legs.push([a, [33, -34]], [[33, -34], [18, -36]], [[18, -36], b]);
-  } else if (b[0] > 22 && b[0] < 135 && a[0] < 0) {
+  } else if (b[0] > 22 && a[0] < 0) {
     legs.push([a, [18, -36]], [[18, -36], [33, -34]], [[33, -34], b]);
   } else {
     legs.push([a, b]);
@@ -252,7 +252,7 @@ function voyagePath(i) {
 }
 
 function pointAt(p, f) {
-  const target = Math.max(0, Math.min(1, f)) * p.total;
+  const target = f * p.total;
   let lo = 0;
   let hi = p.cum.length - 1;
   while (lo < hi) {
@@ -260,68 +260,87 @@ function pointAt(p, f) {
     if (p.cum[mid] < target) lo = mid + 1;
     else hi = mid;
   }
-  const k = Math.max(1, lo);
-  const c0 = p.cum[k - 1];
-  const c1 = p.cum[k];
-  const g = c1 > c0 ? (target - c0) / (c1 - c0) : 0;
-  return [p.xy[(k - 1) * 2] + g * (p.xy[k * 2] - p.xy[(k - 1) * 2]), p.xy[(k - 1) * 2 + 1] + g * (p.xy[k * 2 + 1] - p.xy[(k - 1) * 2 + 1])];
+  if (lo === 0) return [p.xy[0], p.xy[1]];
+  const seg = p.cum[lo] - p.cum[lo - 1] || 1;
+  const u = (target - p.cum[lo - 1]) / seg;
+  return [p.xy[lo * 2 - 2] + (p.xy[lo * 2] - p.xy[lo * 2 - 2]) * u, p.xy[lo * 2 - 1] + (p.xy[lo * 2 + 1] - p.xy[lo * 2 - 1]) * u];
 }
 
 function buildColumbusPath(v) {
-  const pts = [];
-  for (let j = 1; j < v.pts.length; j++) {
-    const s = sampleGreatCircle(v.pts[j - 1], v.pts[j], Math.max(4, Math.ceil(d3.geoDistance(v.pts[j - 1], v.pts[j]) * 60)));
-    if (pts.length) s.shift();
-    pts.push(...s);
-  }
-  const xy = new Float32Array(pts.length * 2);
-  const cum = new Float32Array(pts.length);
-  let total = 0;
+  const segs = [];
   let d = "";
-  pts.forEach((g, k) => {
-    const [x, y] = projection(g);
-    xy[k * 2] = x;
-    xy[k * 2 + 1] = y;
-    if (k > 0) {
-      total += Math.hypot(x - xy[k * 2 - 2], y - xy[k * 2 - 1]);
-      d += `L${x.toFixed(1)},${y.toFixed(1)}`;
-    } else d = `M${x.toFixed(1)},${y.toFixed(1)}`;
-    cum[k] = total;
-  });
-  return { d, xy, cum, total };
+  for (let k = 0; k < v.stops.length - 1; k++) {
+    const a = v.stops[k];
+    const b = v.stops[k + 1];
+    const pts = a[1] === b[1] && a[2] === b[2] ? [[a[1], a[2]]] : sampleGreatCircle([a[1], a[2]], [b[1], b[2]], Math.max(2, Math.ceil(d3.geoDistance([a[1], a[2]], [b[1], b[2]]) * 60)));
+    const xy = pts.map((g) => projection(g));
+    segs.push({ t0: a[3], t1: b[3], xy, from: a[0], to: b[0] });
+    d += (k === 0 ? "M" : "L") + xy.map((p) => p.join(",")).join("L");
+  }
+  return { d, segs };
 }
 
 function columbusPosition(v, t) {
-  const f = Math.max(0, Math.min(1, (t - v.y0) / (v.y1 - v.y0)));
-  return { xy: pointAt(v.projected, f), f };
+  const segs = v.projected.segs;
+  for (const s of segs) {
+    if (t <= s.t1) {
+      const f = Math.max(0, Math.min(1, (t - s.t0) / (s.t1 - s.t0 || 1)));
+      const k = f * (s.xy.length - 1);
+      const i = Math.floor(k);
+      const a = s.xy[i];
+      const b = s.xy[Math.min(s.xy.length - 1, i + 1)];
+      return { xy: [a[0] + (b[0] - a[0]) * (k - i), a[1] + (b[1] - a[1]) * (k - i)], seg: s, f };
+    }
+  }
+  const last = segs[segs.length - 1];
+  return { xy: last.xy[last.xy.length - 1], seg: last, f: 1 };
+}
+
+function columbusProgressLength(v, t, pathEl) {
+  const total = pathEl.getTotalLength();
+  const t0 = v.stops[0][3];
+  const t1 = v.stops[v.stops.length - 1][3];
+  if (t <= t0) return 0;
+  if (t >= t1) return total;
+  let done = 0;
+  let all = 0;
+  for (const s of v.projected.segs) {
+    let len = 0;
+    for (let i = 1; i < s.xy.length; i++) len += Math.hypot(s.xy[i][0] - s.xy[i - 1][0], s.xy[i][1] - s.xy[i - 1][1]);
+    all += len;
+    if (t >= s.t1) done += len;
+    else if (t > s.t0) done += len * ((t - s.t0) / (s.t1 - s.t0));
+  }
+  return (done / (all || 1)) * total;
 }
 
 function renderStatic() {
   const t = state.t;
-  if (state.layers.shade) {
-    countryPaths
-      .classed("americas", false)
-      .attr("fill", (d) => {
-        const c = baseline.get(d.id);
-        if (!c) return "#141f33";
-        const b = popAt(c, START);
-        const ratio = b > 0 ? popAt(c, t) / b : 1;
-        return shade(Math.log(Math.max(ratio, 1e-6)));
-      });
-  } else {
-    countryPaths.attr("fill", null).classed("americas", (d) => baseline.has(d.id));
-  }
-  bubbles.style("display", state.layers.bubbles ? null : "none").attr("r", (c) => rScale(popAt(c, t)));
-  gColumbus.style("display", state.layers.columbus ? null : "none");
+  countryPaths.style("fill", (d) => {
+    const c = baseline.get(d.id);
+    if (!c || !state.layers.shade) return null;
+    const b = popAt(c, START);
+    const p = popAt(c, t);
+    return shade(Math.log(Math.max(1e-6, p / b)));
+  });
+  bubbles
+    .style("display", state.layers.bubbles ? null : "none")
+    .attr("r", (c) => Math.max(1.2, rScale(popAt(c, t))));
+
+  columbusGroups.style("display", (v) => {
+    if (!state.layers.columbus) return "none";
+    const t0 = v.stops[0][3];
+    const t1 = v.stops[v.stops.length - 1][3];
+    return t >= t0 && t <= t1 + 25 ? null : "none";
+  });
   columbusGroups.each(function (v) {
     const g = d3.select(this);
-    if (t < v.y0 - 0.02 || !state.layers.columbus) {
-      g.style("opacity", 0);
-      return;
-    }
-    const t1 = v.y1 + 0.4;
-    const len = v.projected.total * Math.max(0, Math.min(1, (t - v.y0) / (v.y1 - v.y0)));
-    const total = v.projected.total;
+    const t0 = v.stops[0][3];
+    const t1 = v.stops[v.stops.length - 1][3];
+    if (t < t0 || t > t1 + 25) return;
+    const route = g.select(".c-route").node();
+    const total = route.getTotalLength();
+    const len = columbusProgressLength(v, t, route);
     const fade = t > t1 ? Math.max(0.15, 1 - (t - t1) / 6) : 1;
     g.style("opacity", fade);
     g.select(".c-route").attr("stroke-dasharray", `${len} ${total}`);
@@ -332,7 +351,11 @@ function renderStatic() {
       .attr("x", pos.xy[0] + 9)
       .attr("y", pos.xy[1] - 9)
       .style("display", active ? null : "none")
-      .text(() => (v.who && v.who !== v.name ? `${v.who} · ${v.name}` : v.name));
+      .text(() => {
+        const head = v.who && v.who !== v.name ? `${v.who} · ${v.name}` : v.name;
+        const place = pos.f > 0 && pos.f < 1 ? pos.seg.to : pos.f >= 1 ? pos.seg.to : pos.seg.from;
+        return place ? `${head} ${pos.f > 0 && pos.f < 1 ? "→" : "·"} ${place}` : head;
+      });
   });
 
   updatePanel();
@@ -482,7 +505,7 @@ function updatePanel() {
   const thisYear = estByYear.get(y);
   document.getElementById("stat-embarked").textContent = fmt(e);
   document.getElementById("stat-embarked-sub").innerHTML =
-    (thisYear ? `${fmt(thisYear.embarked)} this year · ` : "") + `${fmt(e - dis)} died at sea`;
+    (thisYear ? `${fmt(thisYear.embarked)} forced aboard this year · ` : "") + `~${fmt(e - dis)} died at sea`;
 
   const top = pop.countries
     .map((c) => ({ c, v: popAt(c, t) }))
@@ -499,7 +522,7 @@ function updatePanel() {
     );
 
   let ev = null;
-  for (const e2 of EVENTS) if (e2[0] <= t && t - e2[0] < 14) ev = e2;
+  for (const e of EVENTS) if (e[0] <= t && t - e[0] < 14) ev = e;
   if (ev) {
     eventEl.innerHTML = `<span class="ev-year">${Math.floor(ev[0])}</span>${ev[1]}`;
     eventEl.style.opacity = 1;
@@ -508,15 +531,15 @@ function updatePanel() {
 
 {
   const legend = d3.select("#map-legend");
-  legend.append("div").attr("class", "lg-title").text("Ships");
+  legend.append("div").attr("class", "lg-title").text("Voyages");
   legend
     .append("div")
     .attr("class", "nation-legend")
     .selectAll("span")
     .data([
-      ["Slave ship (documented)", TYPE_COLORS.slave],
-      ["Migration (representative)", TYPE_COLORS.migration],
-      ["Exploration", TYPE_COLORS.exploration],
+      ["Slave voyage (documented)", TYPE_COLORS.slave],
+      ["Free migration (representative)", TYPE_COLORS.migration],
+      ["Exploration voyage", TYPE_COLORS.exploration],
     ])
     .join("span")
     .html(([name, c]) => `<i style="background:${c}"></i>${name}`);
@@ -549,85 +572,100 @@ function drawCharts() {
   let y;
   if (state.scale === "log") {
     y = d3.scaleLog([1e5, 1.5e9], [ph - chartMargin.bottom, chartMargin.top]).clamp(true);
+    const series = [...REGIONS.map((r, k) => ({ name: r, values: regionTotals[k], color: REGION_COLORS[r] })), { name: "Americas total", values: totalSeries, color: "#fff" }];
+    popSvg
+      .append("g")
+      .selectAll("path")
+      .data(series)
+      .join("path")
+      .attr("fill", "none")
+      .attr("stroke", (s) => s.color)
+      .attr("stroke-width", (s) => (s.name === "Americas total" ? 2.2 : 1.6))
+      .attr("d", (s) => d3.line((v, i) => popX(years[i]), (v) => y(Math.max(1, v)))(s.values));
   } else {
-    y = d3.scaleLinear([0, d3.max(totalSeries)], [ph - chartMargin.bottom, chartMargin.top]);
+    y = d3.scaleLinear([0, d3.max(totalSeries) * 1.05], [ph - chartMargin.bottom, chartMargin.top]);
+    const rows = years.map((yr, i) => Object.fromEntries([["year", yr], ...REGIONS.map((r, k) => [r, regionTotals[k][i]])]));
+    const stack = d3.stack().keys(REGIONS)(rows);
+    popSvg
+      .append("g")
+      .selectAll("path")
+      .data(stack)
+      .join("path")
+      .attr("fill", (s) => REGION_COLORS[s.key])
+      .attr("fill-opacity", 0.85)
+      .attr("d", d3.area((d) => popX(d.data.year), (d) => y(d[0]), (d) => y(d[1])));
   }
-  popSvg.append("g").attr("class", "axis").attr("transform", `translate(0,${ph - chartMargin.bottom})`).call(d3.axisBottom(popX).ticks(8).tickFormat(d3.format("d")));
-  popSvg.append("g").attr("class", "axis").attr("transform", `translate(${chartMargin.left},0)`).call(
-    state.scale === "log" ? d3.axisLeft(y).ticks(4, ".0s") : d3.axisLeft(y).ticks(5, ".2s")
-  );
-  const line = d3
-    .line()
-    .x((d, i) => popX(years[i]))
-    .y((d) => y(Math.max(state.scale === "log" ? 1e5 : 0, d)));
-  const series = [...REGIONS.map((r, k) => ({ name: r, values: regionTotals[k], color: REGION_COLORS[r] })), { name: "Americas total", values: totalSeries, color: "#fff" }];
   popSvg
     .append("g")
-    .selectAll("path")
-    .data(series)
-    .join("path")
-    .attr("fill", "none")
-    .attr("stroke", (s) => s.color)
-    .attr("stroke-width", (s) => (s.name === "Americas total" ? 1.8 : 1.2))
-    .attr("d", (s) => line(s.values));
-  const legend = popSvg.append("g").attr("class", "chart-legend").attr("transform", `translate(${chartMargin.left + 8},10)`);
-  series.forEach((s, k) => {
-    const g = legend.append("g").attr("transform", `translate(${k * 118},0)`);
-    g.append("line").attr("x1", 0).attr("x2", 14).attr("y1", 3).attr("y2", 3).attr("stroke", s.color).attr("stroke-width", 2);
-    g.append("text").attr("x", 18).attr("y", 6).text(s.name);
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${ph - chartMargin.bottom})`)
+    .call(d3.axisBottom(popX).tickFormat(d3.format("d")).ticks(pw / 70));
+  popSvg
+    .append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(${chartMargin.left},0)`)
+    .call(
+      state.scale === "log"
+        ? d3.axisLeft(y).tickValues([1e5, 1e6, 1e7, 1e8, 1e9]).tickFormat(d3.format(".0s"))
+        : d3.axisLeft(y).ticks(5).tickFormat(d3.format(".2s"))
+    );
+  const leg = popSvg.append("g").attr("class", "chart-legend").attr("transform", `translate(${chartMargin.left + 4},8)`);
+  [...REGIONS, ...(state.scale === "log" ? ["Americas total"] : [])].forEach((r, k) => {
+    const g = leg.append("g").attr("transform", `translate(${k * 112},0)`);
+    g.append("rect").attr("width", 10).attr("height", 3).attr("y", -3).attr("fill", REGION_COLORS[r] || "#fff");
+    g.append("text").attr("x", 14).attr("y", 1).text(r);
   });
   popSvg.append("line").attr("class", "cursor").attr("y1", chartMargin.top).attr("y2", ph - chartMargin.bottom);
-  popSvg.append("text").attr("class", "cursor-label").attr("y", chartMargin.top - 6);
+  popSvg.append("text").attr("class", "cursor-label").attr("y", chartMargin.top + 10);
   attachScrub(popSvg, () => popX);
 
   const tw = tradeSvg.node().getBoundingClientRect().width || 600;
-  tradeSvg.attr("height", ph).selectAll("*").remove();
-  tradeX = d3.scaleLinear([1492, 1870], [chartMargin.left, tw - chartMargin.right]);
-  const nationKeys = [...new Set(est.years.flatMap((yr) => Object.keys(yr.byNation)))].sort((a, b) => +a - +b);
-  const stack = d3
-    .stack()
-    .keys(nationKeys)
-    .value((yr, k) => yr.byNation[k] || 0);
-  const layers = stack(est.years);
-  const ty = d3.scaleLinear([0, d3.max(layers.at(-1), (d) => d[1]) || 1], [ph - chartMargin.bottom, chartMargin.top]);
-  tradeSvg.append("g").attr("class", "axis").attr("transform", `translate(0,${ph - chartMargin.bottom})`).call(d3.axisBottom(tradeX).ticks(8).tickFormat(d3.format("d")));
-  tradeSvg.append("g").attr("class", "axis").attr("transform", `translate(${chartMargin.left},0)`).call(d3.axisLeft(ty).ticks(5, ".2s"));
-  const area = d3
-    .area()
-    .x((d) => tradeX(d.data.year))
-    .y0((d) => ty(d[0]))
-    .y1((d) => ty(d[1]));
+  const th = 190;
+  tradeSvg.attr("height", th).selectAll("*").remove();
+  tradeX = d3.scaleLinear([1492, END], [chartMargin.left, tw - chartMargin.right]);
+  const ty = d3.scaleLinear([0, d3.max(est.years, (d) => d.embarked) * 1.05], [th - chartMargin.bottom, chartMargin.top]);
+  const nationKeys = Object.keys(est.nations);
+  const rows = est.years.map((r) => Object.fromEntries([["year", r.year], ...nationKeys.map((k) => [k, r.byNation[k] || 0])]));
+  const stack = d3.stack().keys(nationKeys)(rows);
+  const bw = Math.max(1, tradeX(1493) - tradeX(1492));
   tradeSvg
     .append("g")
-    .selectAll("path")
-    .data(layers)
-    .join("path")
-    .attr("fill", (l) => NATION_COLORS[ESTIMATE_NATION_TO_CODE[l.key] ?? 30])
-    .attr("fill-opacity", 0.85)
-    .attr("d", area);
-  const tlegend = tradeSvg.append("g").attr("class", "chart-legend").attr("transform", `translate(${chartMargin.left + 8},10)`);
-  nationKeys.forEach((k, j) => {
-    const g = tlegend.append("g").attr("transform", `translate(${j * 108},0)`);
-    g.append("rect").attr("width", 10).attr("height", 3).attr("y", 1).attr("fill", NATION_COLORS[ESTIMATE_NATION_TO_CODE[k] ?? 30]);
-    g.append("text").attr("x", 14).attr("y", 6).text(voy.nations[ESTIMATE_NATION_TO_CODE[k] ?? 30]);
-  });
-  const totEmb = d3.sum(est.years, (yr) => yr.embarked);
-  const totDis = d3.sum(est.years, (yr) => yr.disembarked);
+    .selectAll("g")
+    .data(stack)
+    .join("g")
+    .attr("fill", (s) => NATION_COLORS[ESTIMATE_NATION_TO_CODE[s.key] ?? 30])
+    .selectAll("rect")
+    .data((s) => s)
+    .join("rect")
+    .attr("x", (d) => tradeX(d.data.year))
+    .attr("width", bw)
+    .attr("y", (d) => ty(d[1]))
+    .attr("height", (d) => Math.max(0, ty(d[0]) - ty(d[1])));
+  tradeSvg
+    .append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${th - chartMargin.bottom})`)
+    .call(d3.axisBottom(tradeX).tickFormat(d3.format("d")).ticks(tw / 70));
+  tradeSvg
+    .append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(${chartMargin.left},0)`)
+    .call(d3.axisLeft(ty).ticks(5).tickFormat(d3.format(".2s")));
   tradeSvg
     .append("text")
     .attr("class", "chart-note")
     .attr("x", tw - chartMargin.right)
-    .attr("y", 12)
+    .attr("y", 14)
     .attr("text-anchor", "end")
-    .text(`${fmt(totEmb)} embarked · ${fmt(totDis)} survived the crossing`);
-  tradeSvg.append("line").attr("class", "cursor").attr("y1", chartMargin.top).attr("y2", ph - chartMargin.bottom);
-  tradeSvg.append("text").attr("class", "cursor-label").attr("y", chartMargin.top - 6);
+    .text(`${fmt(d3.sum(est.years, (d) => d.embarked))} embarked · ${fmt(d3.sum(est.years, (d) => d.disembarked))} survived the crossing`);
+  tradeSvg.append("line").attr("class", "cursor").attr("y1", chartMargin.top).attr("y2", th - chartMargin.bottom);
+  tradeSvg.append("text").attr("class", "cursor-label").attr("y", chartMargin.top + 10);
   attachScrub(tradeSvg, () => tradeX);
   updateCursor();
 }
 
 function updateCursor() {
-  if (!popX || !tradeX) return;
+  if (!popX) return;
   const t = state.t;
   const y = Math.floor(t);
   popSvg.select(".cursor").attr("x1", popX(t)).attr("x2", popX(t));
@@ -675,6 +713,7 @@ playBtn.addEventListener("click", () => {
   if (!state.playing && state.t >= END) setTime(START, true);
   state.playing = !state.playing;
   playBtn.textContent = state.playing ? "❚❚" : "▶";
+  playBtn.setAttribute("aria-label", state.playing ? "Pause" : "Play");
   playBtn.classList.toggle("on", state.playing);
 });
 document.getElementById("speed").addEventListener("change", (e) => (state.speed = +e.target.value));
@@ -735,6 +774,7 @@ function frame(now) {
     if (state.t >= END) {
       state.playing = false;
       playBtn.textContent = "▶";
+      playBtn.setAttribute("aria-label", "Play");
       playBtn.classList.remove("on");
       renderStatic();
     }
