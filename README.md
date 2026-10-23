@@ -9,6 +9,7 @@ npm install
 npm run dev     # local dev server
 npm run build   # static build in dist/
 npm run data    # rebuild public/data from the raw sources
+npm run deploy  # publish the build to the gh-pages branch
 ```
 
 This is a demo project for [Agent Duel](https://github.com/bottomless/agent-duel), blinded battles between coding agents.
